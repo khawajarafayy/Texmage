@@ -1,0 +1,4 @@
+Main color: Vibrant Blue (#3498db)
+Accent Color: Electric Purple (#8e44ad), Lime Green (#2ecc71)
+Text Color : Dark Gray (#333333)
+Button Color: Bright Cyan (#1abc9c)

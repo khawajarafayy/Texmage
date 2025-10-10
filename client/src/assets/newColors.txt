@@ -1,0 +1,10 @@
+background: '#121212',
+surface: '#1E1E1E',
+primary: '#1ABC9C',
+secondary: '#3498DB',
+textPrimary: '#E0E0E0',
+textSecondary: '#B0B0B0',
+borderColor: '#2C2C2C',
+error: '#E74C3C',
+success: '#2ECC71',
+warning: '#F39C12'

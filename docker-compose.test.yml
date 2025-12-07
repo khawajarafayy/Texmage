@@ -1,0 +1,79 @@
+# Docker Compose for testing environment
+# Used by Jenkins pipeline for running tests
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: texmage-mongodb-test
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: texmage
+    networks:
+      - texmage-test-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    container_name: texmage-server-test
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - texmage-test-network
+
+  # Frontend Client (Development mode for testing)
+  client:
+    image: node:18-alpine
+    container_name: texmage-client-test
+    working_dir: /app/client
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./client:/app/client
+    environment:
+      - VITE_BACKEND_URL=http://server:3000
+    depends_on:
+      - server
+    networks:
+      - texmage-test-network
+
+  # Selenium Tests
+  tests:
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    container_name: texmage-tests
+    environment:
+      - BASE_URL=http://client:5173
+      - APP_URL=http://client:5173
+    depends_on:
+      - client
+      - server
+    networks:
+      - texmage-test-network
+    volumes:
+      - ./tests:/app/tests
+    command: python test_texmage.py
+
+networks:
+  texmage-test-network:
+    driver: bridge
+

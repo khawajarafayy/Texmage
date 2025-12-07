@@ -1,0 +1,121 @@
+pipeline {
+    agent any
+    
+    environment {
+        NODE_VERSION = '18'
+        PYTHON_VERSION = '3.9'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Setup Environment') {
+            steps {
+                script {
+                    // Install Node.js dependencies for the application
+                    sh '''
+                        cd client
+                        npm install
+                    '''
+                    
+                    sh '''
+                        cd server
+                        npm install
+                    '''
+                    
+                    // Install Python dependencies for Selenium tests
+                    sh '''
+                        cd tests
+                        pip3 install -r requirements.txt
+                    '''
+                }
+            }
+        }
+        
+        stage('Start Application') {
+            steps {
+                script {
+                    // Start MongoDB (if not already running)
+                    // sh 'sudo systemctl start mongod'
+                    
+                    // Start backend server in background
+                    sh '''
+                        cd server
+                        nohup npm start > ../server.log 2>&1 &
+                        echo $! > ../server.pid
+                    '''
+                    
+                    // Wait for server to start
+                    sh 'sleep 5'
+                    
+                    // Start frontend in background
+                    sh '''
+                        cd client
+                        nohup npm run dev > ../client.log 2>&1 &
+                        echo $! > ../client.pid
+                    '''
+                    
+                    // Wait for frontend to start
+                    sh 'sleep 10'
+                }
+            }
+        }
+        
+        stage('Run Selenium Tests') {
+            steps {
+                script {
+                    sh '''
+                        cd tests
+                        python3 test_texmage.py
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Archive test results
+                    archiveArtifacts artifacts: 'tests/*.log', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Stop Application') {
+            steps {
+                script {
+                    // Stop frontend
+                    sh '''
+                        if [ -f client.pid ]; then
+                            kill $(cat client.pid) || true
+                            rm client.pid
+                        fi
+                    '''
+                    
+                    // Stop backend
+                    sh '''
+                        if [ -f server.pid ]; then
+                            kill $(cat server.pid) || true
+                            rm server.pid
+                        fi
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up
+            sh 'rm -f *.log *.pid || true'
+        }
+        success {
+            echo 'All tests passed successfully!'
+        }
+        failure {
+            echo 'Tests failed. Check logs for details.'
+        }
+    }
+}
+

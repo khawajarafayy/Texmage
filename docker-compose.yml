@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: texmage-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: texmage
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - texmage-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Server
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+    container_name: texmage-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - texmage-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Client
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: client-builder
+    container_name: texmage-client
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    command: sh -c "cd /app/client && npm run dev -- --host 0.0.0.0"
+    working_dir: /app/client
+    volumes:
+      - ./client:/app/client
+      - /app/client/node_modules
+    environment:
+      - VITE_BACKEND_URL=http://server:3000
+    depends_on:
+      - server
+    networks:
+      - texmage-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  texmage-network:
+    driver: bridge
+
